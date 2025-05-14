@@ -1,0 +1,128 @@
+# Values for Open WebUI Helm Chart - Development Environment
+
+# Image configuration - supports switching between official and custom images
+image:
+  %{ if use_custom_image }
+  # Use custom image if specified
+  repository: "${custom_image_repository}"
+  tag: "${custom_image_tag}"
+  pullPolicy: Always
+  %{ endif }
+
+# Configure storage to use S3
+persistence:
+  enabled: true
+  provider: s3
+  s3:
+    accessKey: "${s3_access_key}"
+    secretKey: "${s3_secret_key}"
+    region: "${s3_region}"
+    bucket: "${s3_bucket}"
+    endpointUrl: "https://s3.amazonaws.com"
+    keyPrefix: "data"
+
+# Disable Ollama integration since we'll only use OpenAI API
+ollama:
+  enabled: false
+
+# Configure LoadBalancer service - properly configured for internet access
+service:
+  type: LoadBalancer
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+    service.beta.kubernetes.io/aws-load-balancer-attributes: "load_balancing.cross_zone.enabled=true"
+  port: 80
+  targetPort: 8080
+  # The name field helps with consistent naming in Kubernetes
+  name: "open-webui"
+
+# Configure ingress
+ingress:
+  enabled: true
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80, "HTTPS": 443}]'
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+    alb.ingress.kubernetes.io/certificate-arn: "${aws_acm_certificate_arn}"
+    alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS-1-2-2017-01
+    alb.ingress.kubernetes.io/healthcheck-path: /health
+    alb.ingress.kubernetes.io/group.name: open-webui
+    alb.ingress.kubernetes.io/subnets: "${public_subnet_ids}"
+  host: "${domain_name}"
+  tls: true
+
+# Resources for stable operation (increased from previous values)
+resources:
+  requests:
+    memory: "512Mi"
+    cpu: "200m"
+  limits:
+    memory: "1Gi"  # Doubled to prevent OOMKilled issues
+    cpu: "500m"    # Increased to allow better performance
+
+# Configure OpenAI API
+enableOpenaiApi: true
+openaiBaseApiUrl: "https://api.openai.com/v1"
+
+# Environment variables for the application
+extraEnvVars:
+  - name: DATABASE_URL
+    value: "${db_connection_string}"
+  - name: OPENAI_API_KEY
+    value: "${openai_api_key}"  # Inject API key from Terraform variables
+  - name: WEBUI_NAME
+    value: "Technologymatch AI"
+  - name: MICROSOFT_REDIRECT_URI
+    value: "https://ai-dev.technologymatch.com/oauth/microsoft/callback"
+  # Additional environment variables to ensure proper configuration
+  - name: LOG_LEVEL
+    value: "info"
+  - name: DEPLOYMENT_ENV 
+    value: "development"
+
+# Database configuration (using external RDS)
+databaseUrl: "${db_connection_string}"
+postgresql:
+  enabled: false  # Disable built-in PostgreSQL since we're using RDS
+
+# Configure health checks with significantly more lenient settings for dev
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 300  # 5 minutes to give app time to download models and start up
+  periodSeconds: 30
+  failureThreshold: 10     # Allow more failures before restarting
+  timeoutSeconds: 5        # Give more time for health check to respond
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 180  # 3 minutes before checking readiness
+  periodSeconds: 30
+  failureThreshold: 15     # More retries before marking as not ready
+  timeoutSeconds: 5        # Give more time for health check to respond
+
+# Configure pipelines for multi-provider support (OpenAI, Anthropic, Gemini)
+pipelines:
+  enabled: true
+  # Also increase resources for pipelines
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "100m"
+    limits:
+      memory: "1Gi"
+      cpu: "500m"
+  # Use ephemeral storage for development
+  persistence:
+    enabled: true
+    type: emptyDir
+    existingClaim: null
+    storageClass: null
+    size: null

@@ -1,0 +1,113 @@
+# Values for Open WebUI Helm Chart - Production Environment
+
+# Configure storage to use S3
+persistence:
+  enabled: true
+  provider: s3
+  s3:
+    accessKey: "${s3_access_key}"
+    secretKey: "${s3_secret_key}"
+    region: "${s3_region}"
+    bucket: "${s3_bucket}"
+    endpointUrl: "https://s3.amazonaws.com"
+    keyPrefix: "data"
+
+# Disable Ollama integration since we'll only use OpenAI API
+ollama:
+  enabled: false
+
+# Configure LoadBalancer service
+service:
+  type: LoadBalancer
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+    service.beta.kubernetes.io/aws-load-balancer-ssl-cert: "${cert_arn}"
+    service.beta.kubernetes.io/aws-load-balancer-ssl-ports: "https"
+    service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "http"
+
+# Configure ingress
+ingress:
+  enabled: true
+  annotations:
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80, "HTTPS": 443}]'
+    alb.ingress.kubernetes.io/actions.ssl-redirect: '{"Type": "redirect", "RedirectConfig": {"Protocol": "HTTPS", "Port": "443", "StatusCode": "HTTP_301"}}'
+    alb.ingress.kubernetes.io/ssl-redirect: '443'
+    alb.ingress.kubernetes.io/certificate-arn: "${cert_arn}"
+  host: "${domain_name}"
+  tls: true
+  
+# Resources optimized for production
+resources:
+  requests:
+    memory: "1Gi"
+    cpu: "500m"
+  limits:
+    memory: "2Gi"
+    cpu: "1000m"
+
+# Configure OpenAI API
+enableOpenaiApi: true
+openaiBaseApiUrl: "https://api.openai.com/v1"
+extraEnvVars:
+  - name: OPENAI_API_KEY
+    value: "${openai_api_key}"  # API key from AWS Secrets Manager
+  - name: DATABASE_URL
+    value: "${db_connection_string}"
+  - name: WEBUI_NAME
+    value: "Technologymatch AI"
+  - name: MICROSOFT_REDIRECT_URI
+    value: "https://ai.technologymatch.com/oauth/microsoft/callback"
+
+# Database configuration (using external RDS)
+databaseUrl: "${db_connection_string}"
+postgresql:
+  enabled: false  # Disable built-in PostgreSQL since we're using RDS
+
+# Configure health checks with more lenient settings for initial startup
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 120  # Increase initial delay to give more time to start up
+  periodSeconds: 30
+  failureThreshold: 5      # Allow more failures before restarting
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 60   # More time before checking readiness
+  periodSeconds: 15
+  failureThreshold: 8      # More retries before marking as not ready
+
+# Configure pod disruption budget for high availability
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+# Configure security context
+podSecurityContext:
+  fsGroup: 1000
+containerSecurityContext:
+  runAsUser: 1000
+  runAsGroup: 1000
+  runAsNonRoot: true
+
+# Set higher replica count for production
+replicaCount: 2
+
+# Configure pipelines for multi-provider support (OpenAI, Anthropic, Gemini)
+pipelines:
+  enabled: true
+  # For production, we use a proper persistent volume with EBS storage
+  persistence:
+    enabled: true
+    type: pvc
+    size: 10Gi
+    storageClass: gp2
+    annotations:
+      "volume.beta.kubernetes.io/storage-provisioner": "ebs.csi.aws.com"

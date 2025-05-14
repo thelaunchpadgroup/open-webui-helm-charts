@@ -1,0 +1,33 @@
+# Example Terraform variables file for production environment
+# Copy to terraform.tfvars and fill in your values
+
+# AWS Region
+aws_region = "us-east-1"
+
+# VPC Configuration
+vpc_cidr = "10.0.0.0/16"
+availability_zones = ["us-east-1a", "us-east-1b", "us-east-1c"]
+
+# Database Configuration
+db_instance_class = "db.t3.medium"
+db_allocated_storage = 50
+db_max_allocated_storage = 200
+db_name = "openwebui"
+db_username = "openwebui"
+# Note: The DB password is managed via AWS Secrets Manager
+
+# Kubernetes Configuration
+kubernetes_version = "1.28"
+node_instance_types = ["t3.large"]
+node_disk_size = 50
+desired_nodes = 3
+min_nodes = 2
+max_nodes = 5
+
+# OpenWebUI Configuration
+open_webui_version = "6.13.0"
+
+# S3 Access Credentials
+# IMPORTANT: Never commit these values to Git!
+s3_access_key = "YOUR_ACCESS_KEY_HERE"
+s3_secret_key = "YOUR_SECRET_KEY_HERE"

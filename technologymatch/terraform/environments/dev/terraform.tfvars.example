@@ -1,0 +1,34 @@
+# Custom image configuration for Open WebUI
+use_custom_image = true
+
+# ECR repository and image tag
+custom_image_repository = "your-account-id.dkr.ecr.us-east-1.amazonaws.com/your-org/open-webui"
+custom_image_tag = "latest"  # Replace with your tag
+
+# AWS region
+aws_region = "us-east-1"
+
+# Infrastructure sizing - optimized for dev environment
+db_instance_class = "db.t4g.micro"       # Cost-effective for dev
+db_allocated_storage = 20                # Base storage in GB
+db_max_allocated_storage = 100           # Max auto-scaling storage in GB
+node_instance_types = ["t3a.medium"]     # Good balance of price/performance
+node_disk_size = 20                      # GB for EKS nodes
+desired_nodes = 1                        # Single node for dev environment
+min_nodes = 1
+max_nodes = 2                            # Allow for one extra node during peak usage
+
+# Network configuration
+vpc_cidr = "10.0.0.0/16"
+availability_zones = ["us-east-1a", "us-east-1b"]
+
+# Kubernetes and chart versions  
+kubernetes_version = "1.28"              # Currently supported EKS version
+open_webui_version = "6.13.0"            # Helm chart version
+
+# Database configuration
+db_name = "openwebui"
+db_username = "openwebui"
+
+# WAF configuration - disabled for dev
+enable_waf = false
