@@ -30,7 +30,7 @@ provider "kubernetes" {
 
 locals {
   # Using a unique identifier to avoid conflicts with resources still being deleted
-  unique_suffix = "v6"
+  unique_suffix = "v9"
   prefix = "openwebui-dev-${local.unique_suffix}"
   tags = {
     Environment = "dev"
@@ -165,7 +165,7 @@ resource "kubernetes_namespace" "open_webui" {
 # Wait for AWS Load Balancer Controller to be ready
 resource "time_sleep" "wait_for_lb_controller" {
   depends_on = [module.eks]
-  create_duration = "300s" # Wait 5 minutes for the controller to be fully ready
+  create_duration = "600s" # Wait 10 minutes for the controller to be fully ready
 }
 
 # Deploy OpenWebUI Helm chart
@@ -176,12 +176,17 @@ resource "helm_release" "open_webui" {
   namespace        = local.namespace
   create_namespace = false # We already created the namespace above
   version          = var.open_webui_version
-  timeout          = 2400 # Increase timeout to 40 minutes to allow plenty of time for resources to provision
+  timeout          = 3600 # Increase timeout to 60 minutes to allow more time for resources to provision
   wait             = true
   wait_for_jobs    = true
-  atomic           = true # If the installation fails, roll back all resources
+  # Setting atomic to false to prevent automatic rollback on timeout
+  # This way resources will remain and we can debug/continue even if the initial timeout is reached
+  atomic           = false 
   cleanup_on_fail  = true # Clean up resources on failed install
   force_update     = true # Force recreation of resources
+  
+  # Retry logic in case of failure
+  replace          = true # Allow replacing existing resources
 
   values = [
     templatefile("${path.module}/values.yaml", {
@@ -214,7 +219,7 @@ resource "helm_release" "open_webui" {
 # Wait for Kubernetes service to be fully available and have a load balancer
 resource "time_sleep" "wait_for_lb" {
   depends_on = [helm_release.open_webui]
-  create_duration = "180s" # Wait 60 seconds after Helm deployment to ensure everything is deployed
+  create_duration = "180s" # Wait 3 minutes after Helm deployment to ensure initial resources are deployed
 }
 
 # Get the load balancer details directly using the Kubernetes provider
@@ -264,35 +269,43 @@ locals {
   
   # Get the ELB zone ID for the current region
   elb_zone_id = lookup(local.elb_zone_ids, var.aws_region, "Z35SXDOTRQ7X7K") # Default to us-east-1 if not found
+  
+  # Maximum number of attempts to check for Ingress availability
+  max_retries = 30
+  
+  # Delay between retries in seconds
+  retry_delay = 10
 }
 
-# Get the ingress details for the application
-data "kubernetes_ingress" "open_webui" {
+# Use a Kubernetes data source to get the ingress directly
+data "kubernetes_ingress_v1" "open_webui" {
+  depends_on = [
+    time_sleep.wait_for_lb,
+    helm_release.open_webui
+  ]
+  
   metadata {
-    name      = "open-webui"
+    name = "open-webui"
     namespace = local.namespace
   }
-
-  depends_on = [
-    time_sleep.wait_for_lb
-  ]
+  
+  # Add a wait for the address to be populated
+  wait_for_load_balancer = true
+  # Wait up to 10 minutes for the ingress to be ready
+  timeouts {
+    read = "10m"
+  }
 }
 
-# Create a CNAME record pointing to the ingress ALB
+# Create a CNAME record pointing to the ingress ALB using data from Kubernetes
 resource "aws_route53_record" "open_webui" {
   zone_id = data.aws_route53_zone.selected.zone_id
   name    = "ai-dev"
   type    = "CNAME"
   ttl     = 300
-  records = [data.kubernetes_ingress.open_webui.status[0].load_balancer[0].ingress[0].hostname]
+  records = [data.kubernetes_ingress_v1.open_webui.status.0.load_balancer.0.ingress.0.hostname]
 
-  # Explicit dependency to ensure we only try to create the record after the load balancer exists
-  depends_on = [
-    data.kubernetes_ingress.open_webui,
-    time_sleep.wait_for_lb
-  ]
-
-  # Use a lifecycle hook to create a new record before destroying the old one
+  # Use lifecycle hooks to ensure clean updates
   lifecycle {
     create_before_destroy = true
   }
@@ -309,6 +322,11 @@ output "eks_cluster_name" {
 
 output "eks_cluster_endpoint" {
   value = module.eks.cluster_endpoint
+}
+
+output "namespace" {
+  value = local.namespace
+  description = "The Kubernetes namespace where Open WebUI is deployed"
 }
 
 output "kubeconfig_command" {
@@ -330,6 +348,11 @@ output "db_secret_arn" {
 output "load_balancer_address" {
   value = try(data.kubernetes_service.open_webui.status.0.load_balancer.0.ingress.0.hostname, "not-available-yet")
   description = "The hostname of the load balancer serving the application"
+}
+
+output "ingress_address" {
+  value = try(data.kubernetes_ingress_v1.open_webui.status.0.load_balancer.0.ingress.0.hostname, "not-available-yet")
+  description = "The hostname of the Ingress ALB serving the application"
 }
 
 output "application_url" {

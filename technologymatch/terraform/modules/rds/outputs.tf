@@ -35,6 +35,7 @@ output "db_secret_arn" {
 
 output "connection_string" {
   description = "The connection string for the database"
-  value       = "postgresql://${aws_db_instance.postgres.username}:${var.create_random_password ? random_password.db_password.result : var.db_password}@${aws_db_instance.postgres.endpoint}/${aws_db_instance.postgres.db_name}"
+  # URL encode the password to escape special characters
+  value       = "postgresql://${aws_db_instance.postgres.username}:${urlencode(var.create_random_password ? random_password.db_password.result : var.db_password)}@${aws_db_instance.postgres.endpoint}/${aws_db_instance.postgres.db_name}"
   sensitive   = true
 }

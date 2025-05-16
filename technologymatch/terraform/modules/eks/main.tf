@@ -157,7 +157,7 @@ data "aws_vpc" "eks_vpc" {
 
 resource "aws_eks_node_group" "open_webui" {
   cluster_name    = aws_eks_cluster.open_webui.name
-  node_group_name = "${var.prefix}-nodes"
+  node_group_name = "${var.prefix}-nodes-v2"  # Modified name to avoid conflict
   node_role_arn   = aws_iam_role.eks_node_role.arn
   subnet_ids      = var.private_subnet_ids
 

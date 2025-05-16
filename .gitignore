@@ -172,3 +172,4 @@ terraform.rc
 **/.env.*
 !**/.env.example
 ### END TECHNOLOGYMATCH CHANGES ###
+technologymatch/terraform/environments/dev/kubeconfig

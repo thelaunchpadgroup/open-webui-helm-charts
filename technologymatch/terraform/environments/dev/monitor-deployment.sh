@@ -3,11 +3,24 @@
 
 set -e
 
-# Get the namespace from the unique_suffix in main.tf
-NAMESPACE=$(grep -A 2 'unique_suffix = ' main.tf | grep -oP '(?<="v).*(?=")' | awk '{print "open-webui-dev-v" $1}')
+# Get the namespace from terraform outputs
+if terraform output -json >/dev/null 2>&1; then
+  # Try to get namespace from terraform output
+  NAMESPACE=$(terraform output -raw namespace 2>/dev/null || echo "")
+  
+  # If not found in terraform output, try to extract from main.tf
+  if [ -z "$NAMESPACE" ]; then
+    NAMESPACE=$(grep -A 2 'unique_suffix = ' main.tf | grep -oP '(?<="v).*(?=")' | awk '{print "open-webui-dev-v" $1}')
+  fi
+else
+  # If terraform output fails, fall back to main.tf parsing
+  NAMESPACE=$(grep -A 2 'unique_suffix = ' main.tf | grep -oP '(?<="v).*(?=")' | awk '{print "open-webui-dev-v" $1}')
+fi
+
+# Default fallback
 if [ -z "$NAMESPACE" ]; then
-  echo "Could not determine namespace from main.tf, using default"
-  NAMESPACE="open-webui-dev-v5"
+  echo "⚠️ Could not determine namespace, using default"
+  NAMESPACE="open-webui-dev-v6"
 fi
 
 echo "🔍 Monitoring deployment in namespace: $NAMESPACE"

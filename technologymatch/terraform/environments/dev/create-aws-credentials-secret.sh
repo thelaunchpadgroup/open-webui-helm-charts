@@ -10,14 +10,29 @@ if ! command -v jq &> /dev/null; then
     exit 1
 fi
 
-# Configuration
-unique_suffix="v6"
+# Extract the unique_suffix from main.tf automatically
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MAIN_TF="${SCRIPT_DIR}/main.tf"
+
+# Extract the unique suffix from the main.tf file
+unique_suffix=$(grep -A 2 'unique_suffix = ' "$MAIN_TF" | grep -oP '(?<="v).*(?=")' | head -1)
+if [ -z "$unique_suffix" ]; then
+    echo "Error: Could not extract unique_suffix from main.tf. Using default."
+    unique_suffix="6"
+fi
+
+# Configuration with dynamically determined suffix
+unique_suffix="v${unique_suffix}"
 namespace="open-webui-dev-${unique_suffix}"
 bucket="technologymatch-open-webui-dev-${unique_suffix}"
 secret_name="openwebui-dev-${unique_suffix}/s3-credentials"
 aws_profile="Technologymatch"
 iam_user_name="openwebui-s3-user-dev-${unique_suffix}"
 policy_name="openwebui-s3-policy-dev-${unique_suffix}"
+
+echo "Using unique suffix: ${unique_suffix}"
+echo "Namespace: ${namespace}"
+echo "S3 bucket: ${bucket}"
 
 # Check if S3 credentials already exist
 echo "Checking if S3 credentials already exist in AWS Secrets Manager..."

@@ -11,7 +11,7 @@ resource "aws_db_subnet_group" "open_webui" {
 }
 
 resource "aws_db_parameter_group" "postgres" {
-  name   = "${var.prefix}-pg-new"
+  name   = "${var.prefix}-pg-v2"  # Changed to avoid conflict
   family = "postgres14"
 
   parameter {
